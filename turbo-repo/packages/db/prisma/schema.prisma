@@ -1,0 +1,120 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+    ADMIN
+    MEMBER
+}
+
+model User {
+  id    Int   @id @default(autoincrement())
+  email   String    @unique
+  password    String 
+
+  memberships   Membership[]
+  assignedIssues IssueAssignment[]
+  comments Comment[]
+}
+
+model Organization {
+  id    Int   @id @default(autoincrement())
+  name    String
+  description   String?
+
+  boards Board[]
+  memberships Membership[]
+}
+
+model Membership {
+  id Int @id @default(autoincrement())
+
+  userId Int
+  orgId Int
+
+  role Role
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, orgId])
+}
+
+model Board {
+id Int @id @default(autoincrement())
+title String
+
+organizationId Int
+organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+sections Section[]
+}
+
+model Section {
+id      Int @id @default(autoincrement())
+  title   String
+
+  boardId Int
+  board   Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  issues Issue[]
+
+  position Int
+}
+
+model Issue {
+id Int @id @default(autoincrement())
+title String 
+description String 
+
+
+sectionId Int
+section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+comments Comment[]
+assignedUsers IssueAssignment[]
+
+position Int
+
+createdAt DateTime @default(now())
+
+updatedAt DateTime @updatedAt
+}
+
+model IssueAssignment {
+
+issueId Int
+issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+userId Int
+user User @relation(fields: [userId], references: [id], onDelete: Cascade )
+
+@@id([issueId, userId])
+
+ }
+
+model Comment {
+  id      Int    @id @default(autoincrement())
+  content String
+
+  issueId Int
+  issue    Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  userId Int
+  user    User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+updatedAt DateTime @updatedAt
+}
+
