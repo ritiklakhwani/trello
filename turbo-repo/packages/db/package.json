@@ -3,6 +3,7 @@
   "module": "index.ts",
   "private": true,
   "type": "module",
+  "postinstall": "prisma generate",
   "exports": {
     "./client": "./index.ts"
   },
