@@ -2,7 +2,9 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import { prisma } from "db/client";
 import { authMiddleware } from "../middleware";
-import { CreateOrgSchema } from "../types";
+import { CreateOrgSchema, OrgNameSchema } from "../types";
+import { success } from "zod";
+import { id } from "zod/locales";
 
 export const router = Router();
 
@@ -27,52 +29,92 @@ router.post(
         msg: "org already exists try using different name!",
       });
 
-    const Org = await prisma.organization.create({
-      data: { name: name, description: description },
+    const Org = await prisma.$transaction(async (tx) => {
+      const created = await tx.organization.create({
+        data: { name: name, description: description },
+      });
+
+      const Membership = await tx.membership.create({
+        data: { userId: req.userId, orgId: created.id, role: "ADMIN" },
+      });
+
+      return { created, Membership };
     });
-
-    if (!Org)
-      return res
-        .status(402)
-        .json({ success: false, msg: "create org failed please try again" });
-
-    const Membership = await prisma.membership.create({
-      data: { userId: req.userId, orgId: Org.id, role: "ADMIN" },
-    });
-
-    if (!Membership)
-      return res
-        .status(402)
-        .json({ success: false, msg: "create org failed please try again" });
 
     res.status(201).json({
       success: true,
       msg: "org created successfully!",
-      data: {
-        orgId: Org.id,
-        membershipId: Membership.id,
-        admin: req.userId,
-      },
+      data: Org,
+      admin: req.userId,
     });
   },
 );
 
-router.get("/org/:userId", async (req: Request, res: Response) => {
-  const { userId } = req.params;
+router.get("/org", authMiddleware, async (req: Request, res: Response) => {
+  const { userId } = req.body;
 
   if (!userId)
     return res.status(401).json({ success: false, msg: "invalid user Id!" });
 
   const exists = await prisma.membership.findMany({
-    where: { userId: Number(userId), role: "ADMIN" },
+    where: { userId: userId, role: "ADMIN" },
     select: { org: { select: { name: true, description: true } } },
   });
 
-  if(!exists) return res.status(401).json({success: false, msg: `no orgs exists for userId: ${userId}`})
+  if (!exists)
+    return res
+      .status(401)
+      .json({ success: false, msg: `no orgs exists for userId: ${userId}` });
 
-  const orgs = exists.map( o => {
-    const 
-  })
+  return res.status(201).json({
+    success: true,
+    data: exists,
+  });
+});
+
+router.delete("/org", authMiddleware, async (req: Request, res: Response) => {
+  const parsed = OrgNameSchema.safeParse(req.body);
+
+  if (!parsed.success)
+    return res.status(401).json({
+      success: false,
+      msg: "invalid input!",
+    });
+
+  const { name } = parsed.data;
+
+  const check = await prisma.$transaction(async (tx) => {
+    const org = await tx.organization.findUnique({
+      where: { name: name },
+    });
+
+    if (!org)
+      return res.status(401).json({
+        success: false,
+        msg: "org not found!",
+      });
+
+    const membership = await tx.membership.findUnique({
+      where: {
+        userId_orgId: { userId: req.userId, orgId: org.id, role: "ADMIN" },
+      },
+    });
+
+    if (!membership)
+      return res.status(401).json({
+        success: false,
+        msg: "membership not found!",
+      });
+
+    return { org, membership };
+  });
+
+  if (!check) return res.status(401).json({
+        success: false,
+        msg: "only the admin/creator of the org can delete!",
+      });
+
+    const deleteOrg = await prisma.organization.delete({where : {id: check[org][id]}})
 });
 
 router.get("/org/:orgId/boards", (req: Request, res: Response) => {});
@@ -110,7 +152,6 @@ router.get(
 
 router.get("/org/:orgId", (req: Request, res: Response) => {});
 router.get("/org/:orgId", (req: Request, res: Response) => {});
-router.delete("/org/:orgId", (req: Request, res: Response) => {});
 router.delete("/org/:orgId", (req: Request, res: Response) => {});
 router.delete("/org/:orgId", (req: Request, res: Response) => {});
 router.put("/org/:orgId", (req: Request, res: Response) => {});

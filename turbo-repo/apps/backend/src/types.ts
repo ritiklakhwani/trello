@@ -34,6 +34,8 @@ export const CreateOrgSchema = z.object({
   description: z.string().min(6)
 });
 
+export const OrgNameSchema = z.object({ name: z.string().min(1) });
+
 export const CreateBoardSchema = z.object({
   orgId: z.number(),
   title: z.string().min(1)
@@ -52,9 +54,23 @@ export const UpdateSectionSchema = z.object({
   title: z.string().min(1)
 })
 
-export const CreateIssueSchema = z.object({})
-export const UpdateIssueSchema = z.object({})
-export const MoveIssueSchema = z.object({})
+export const CreateIssueSchema = z.object({
+  sectionId: z.number(),
+  title: z.string().min(1),
+  description: z.string().min(1)
+})
 
-export const CreateCommentSchema = z.object({})
-export const UpdateCommentSchema = z.object({})
+export const UpdateIssueSchema = z.object({
+  issueId: z.number(),
+  title: z.string().min(1).optional(),
+  description: z.string().optional()
+})
+
+export const MoveIssueSchema = z.object({
+  issueId: z.number(),
+  toSectionId: z.number(),
+  toPosition: z.number().int().min(1)
+})
+
+export const CreateCommentSchema = z.object({ issueId: z.number(), content: z.string().min(1) });
+export const UpdateCommentSchema = z.object({ commentId: z.number(), content: z.string().min(1) });
