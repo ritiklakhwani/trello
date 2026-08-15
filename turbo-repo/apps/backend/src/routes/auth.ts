@@ -1,19 +1,17 @@
-import "dotenv/config";
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { prisma } from "db/client";
 import { SignupSchema, SigninSchema } from "../types";
 import bcrypt from "bcrypt";
-import jwt, { sign, type JwtPayload } from "jsonwebtoken";
-import { authMiddleware } from "../middleware";
-import { success } from "zod";
+import jwt from "jsonwebtoken";
+
 
 const secret = process.env.JWT_SECRET || "";
 
 export const authRouter = Router();
 
 authRouter.post("/signup", async (req: Request, res: Response) => {
-  const parsed = SigninSchema.safeParse(req.body);
+  const parsed = SignupSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(401).json({
       success: false,
@@ -40,9 +38,12 @@ authRouter.post("/signup", async (req: Request, res: Response) => {
     select: { id: true, email: true },
   });
 
+  const token = jwt.sign({ userId: User.id }, secret, { expiresIn: "7d" });
+
   res.status(201).json({
     success: true,
     data: {
+      token: token,
       userId: User.id,
       email: User.email,
     },
@@ -76,7 +77,7 @@ authRouter.post("/signin", async (req: Request, res: Response) => {
       msg: "invalid credentials!",
     });
 
-  const token = jwt.sign({ id: existing.id }, secret, { expiresIn: "7d" });
+  const token = jwt.sign({ userId: existing.id }, secret, { expiresIn: "7d" });
 
   res.status(201).json({
     success: true,
