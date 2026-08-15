@@ -83,38 +83,36 @@ router.delete("/org", authMiddleware, async (req: Request, res: Response) => {
 
   const { name } = parsed.data;
 
-  const check = await prisma.$transaction(async (tx) => {
-    const org = await tx.organization.findUnique({
-      where: { name: name },
-    });
-
-    if (!org)
-      return res.status(401).json({
-        success: false,
-        msg: "org not found!",
-      });
-
-    const membership = await tx.membership.findUnique({
-      where: {
-        userId_orgId: { userId: req.userId, orgId: org.id, role: "ADMIN" },
-      },
-    });
-
-    if (!membership)
-      return res.status(401).json({
-        success: false,
-        msg: "membership not found!",
-      });
-
-    return { org, membership };
+  const org = await prisma.organization.findUnique({
+    where: { name: name },
   });
 
-  if (!check) return res.status(401).json({
-        success: false,
-        msg: "only the admin/creator of the org can delete!",
-      });
+  if (!org)
+    return res.status(401).json({
+      success: false,
+      msg: "org not found!",
+    });
 
-    const deleteOrg = await prisma.organization.delete({where : {id: check[org][id]}})
+  const membership = await prisma.membership.findUnique({
+    where: {
+      userId_orgId: { userId: req.userId, orgId: org.id },
+    },
+  });
+
+  if (!membership || membership.role !== "ADMIN")
+    return res.status(401).json({
+      success: false,
+      msg: "membership not verified!",
+    });
+
+  await prisma.organization.delete({
+    where: { id: org.id },
+  });
+
+  return res.status(201).json({
+    success: true,
+    msg: `deleted org with orgId ${org.id} and name ${org.name} `,
+  });
 });
 
 router.get("/org/:orgId/boards", (req: Request, res: Response) => {});
