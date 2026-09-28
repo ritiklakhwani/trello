@@ -21,7 +21,7 @@ export const SigninSchema = z.object({
 
 export const InviteSchema = z.object({
   email: z.email(), 
-  orgId: z.number()
+  orgName: z.string()
 })
 
 export const DeleteMembershipSchema = z.object({
