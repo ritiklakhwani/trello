@@ -183,7 +183,7 @@ router.get("/org/:orgId/boards", authMiddleware, async (req: Request, res: Respo
 
   if(!membership) return res.status(403).json({
     success: false,
-    msg: `you are not a member of ${org.name}`
+    msg: `membership doesnt exists!`
   })
 
   const board = await prisma.board.findMany({
