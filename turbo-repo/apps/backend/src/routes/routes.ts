@@ -165,7 +165,42 @@ router.post(
   },
 );
 
-router.get("/org/:orgId/boards", (req: Request, res: Response) => {});
+router.get("/org/:orgId/boards", authMiddleware, async (req: Request, res: Response) => {
+
+  const orgId = Number(req.params.orgId)
+
+  if (!Number.isInteger(orgId)) {
+  return res.status(400).json({
+    success: false,
+    msg: "Invalid organization ID",
+  });
+}
+  const membership = await prisma.membership.findUnique({
+    where : {
+      userId_orgId : {userId: req.userId, orgId: orgId}
+    }
+  })
+
+  if(!membership) return res.status(403).json({
+    success: false,
+    msg: `you are not a member of ${org.name}`
+  })
+
+  const board = await prisma.board.findMany({
+    where : {
+      organizationId: orgId
+    }
+  })
+
+  if(board.length === 0) return res.status(403).json({
+    success: false,
+    msg: `no board exists in this org`
+  })
+
+  return res.status(200).json({
+    data : board
+  })
+});
 
 router.delete(
   "/org/:orgId/boards/:boardId",
