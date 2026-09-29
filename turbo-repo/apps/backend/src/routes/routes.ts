@@ -157,7 +157,7 @@ router.post(
       },
     });
 
-    return res.status(401).json({
+    return res.status(201).json({
       success: true,
       msg: "board created succesfully!",
       data: createBoard,
@@ -165,46 +165,98 @@ router.post(
   },
 );
 
-router.get("/org/:orgId/boards", authMiddleware, async (req: Request, res: Response) => {
+router.get(
+  "/org/:orgId/boards",
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    const orgId = Number(req.params.orgId);
 
-  const orgId = Number(req.params.orgId)
-
-  if (!Number.isInteger(orgId)) {
-  return res.status(400).json({
-    success: false,
-    msg: "Invalid organization ID",
-  });
-}
-  const membership = await prisma.membership.findUnique({
-    where : {
-      userId_orgId : {userId: req.userId, orgId: orgId}
+    if (!Number.isInteger(orgId)) {
+      return res.status(400).json({
+        success: false,
+        msg: "Invalid organization ID",
+      });
     }
-  })
+    const membership = await prisma.membership.findUnique({
+      where: {
+        userId_orgId: { userId: req.userId, orgId: orgId },
+      },
+    });
 
-  if(!membership) return res.status(403).json({
-    success: false,
-    msg: `membership doesnt exists!`
-  })
+    if (!membership)
+      return res.status(403).json({
+        success: false,
+        msg: `membership doesnt exists!`,
+      });
 
-  const board = await prisma.board.findMany({
-    where : {
-      organizationId: orgId
-    }
-  })
+    const board = await prisma.board.findMany({
+      where: {
+        organizationId: orgId,
+      },
+    });
 
-  if(board.length === 0) return res.status(403).json({
-    success: false,
-    msg: `no board exists in this org`
-  })
+    if (board.length === 0)
+      return res.status(403).json({
+        success: false,
+        msg: `no board exists in this org`,
+      });
 
-  return res.status(200).json({
-    data : board
-  })
-});
+    return res.status(200).json({
+      data: board,
+    });
+  },
+);
 
 router.delete(
   "/org/:orgId/boards/:boardId",
-  (req: Request, res: Response) => {},
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    const orgId = Number(req.params.orgId);
+    const boardId = Number(req.params.boardId);
+
+    if (!Number.isInteger(orgId) || !Number.isInteger(boardId)) {
+      return res.status(400).json({
+        success: false,
+        msg: "Invalid organization ID or board ID",
+      });
+    }
+
+    const membership = await prisma.membership.findUnique({
+      where: {
+        userId_orgId: { userId: req.userId, orgId: orgId },
+      },
+    });
+
+    if (!membership || membership.role !== "ADMIN")
+      return res.status(403).json({
+        success: false,
+        msg: `membership doesnt exists!`,
+      });
+
+    const board = await prisma.board.findUnique({
+      where: {
+        id: boardId,
+      },
+    });
+
+    if (!board || board.organizationId !== orgId)
+      return res.status(403).json({
+        success: false,
+        msg: `board doesnt exists!`,
+      });
+
+    await prisma.board.delete({
+      where: {
+        id: boardId,
+        organizationId: orgId,
+      },
+    });
+
+    return res.status(201).json({
+      success: true,
+      msg: `board with board id ${boardId} deleted successfully`,
+    });
+  },
 );
 
 router.post(
