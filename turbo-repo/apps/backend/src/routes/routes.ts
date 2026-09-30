@@ -7,9 +7,12 @@ import {
   OrgNameSchema,
   InviteSchema,
   CreateBoardSchema,
+  UpdateBoardSchema,
+  acceptSchema,
 } from "../types";
 import { Resend } from "resend";
 import { success } from "zod";
+import { tr } from "zod/locales";
 
 export const router = Router();
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -236,6 +239,7 @@ router.delete(
     const board = await prisma.board.findUnique({
       where: {
         id: boardId,
+        organizationId: orgId,
       },
     });
 
@@ -255,6 +259,70 @@ router.delete(
     return res.status(201).json({
       success: true,
       msg: `board with board id ${boardId} deleted successfully`,
+    });
+  },
+);
+
+router.put(
+  "/org/:orgId/boards/:boardId",
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    const orgId = Number(req.params.orgId);
+    const boardId = Number(req.params.boardId);
+    const parsed = UpdateBoardSchema.safeParse(req.body);
+
+    if (
+      !Number.isInteger(orgId) ||
+      !Number.isInteger(boardId) ||
+      !parsed.success
+    ) {
+      return res.status(400).json({
+        success: false,
+        msg: "Invalid organization ID or board ID or invalid input",
+      });
+    }
+
+    const { title } = parsed.data;
+
+    const membership = await prisma.membership.findUnique({
+      where: {
+        userId_orgId: { userId: req.userId, orgId: orgId },
+      },
+    });
+
+    if (!membership || membership.role !== "ADMIN")
+      return res.status(403).json({
+        success: false,
+        msg: `membership doesnt exists!`,
+      });
+
+    const board = await prisma.board.findFirst({
+      where: {
+        id: boardId,
+        organizationId: orgId,
+      },
+    });
+
+    if (!board)
+      return res.status(403).json({
+        success: false,
+        msg: `Board doesn't exist in this organization!`,
+      });
+
+    await prisma.board.update({
+      where: {
+        id: boardId,
+        organizationId: orgId,
+      },
+
+      data: {
+        title,
+      },
+    });
+
+    return res.status(201).json({
+      success: true,
+      msg: `board with board id ${boardId} updated successfully`,
     });
   },
 );
@@ -364,13 +432,100 @@ router.post(
       return res.status(400).json({ error });
     }
 
-    res
+    return res
       .status(200)
       .json({ success: true, data: "invitation sent successfully!" });
   },
 );
 
-router.post("/org/accept", (req: Request, res: Response) => {});
+router.post(
+  "/org/accept",
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    const parsed = acceptSchema.safeParse(req.body);
+
+    if (!parsed.success)
+      return res.status(401).json({
+        success: false,
+        msg: "invalid input!",
+      });
+
+    const { token } = parsed.data;
+
+    const Invitation = await prisma.invitation.findUnique({
+      where: {
+        token,
+      },
+    });
+
+    if (!Invitation)
+      return res.status(401).json({
+        success: false,
+        msg: "Invitation not found!",
+      });
+
+    if (Invitation.status !== "PENDING") {
+      return res.status(400).json({
+        success: false,
+        msg: "Invitation is no longer valid!",
+      });
+    }
+
+    if (Invitation.expiresAt < new Date()) {
+      return res.status(400).json({
+        success: false,
+        msg: "Invitation has expired!",
+      });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: {
+        id: req.userId
+      }
+    })
+
+    if (!user || user.email !== Invitation.email) {
+      return res.status(403).json({
+        success: false,
+        msg: "This invitation was not sent to your email!",
+      });
+    }
+
+    const existing = await prisma.membership.findUnique({
+      where: {
+        userId_orgId: { userId: req.userId, orgId: Invitation.organizationId},
+      },
+    });
+
+    if (existing) {
+      return res.status(409).json({
+        success: false,
+        msg: "You are already a member of this organization!",
+      });
+    }
+
+    await prisma.membership.create({
+      data: {
+        userId: req.userId,
+        orgId: Invitation.organizationId,
+        role: "MEMBER",
+      },
+    });
+
+    await prisma.invitation.update({
+      where: {
+        id: Invitation.id,
+      },
+      data: {
+        status: "ACCEPTED",
+      },
+    });
+
+    return res
+      .status(200)
+      .json({ success: true, data: "invitation accepted successfully!" });
+  },
+);
 
 router.post(
   "/org/:orgId/boards/:boardId/section",
@@ -382,8 +537,8 @@ router.put(
   (req: Request, res: Response) => {},
 );
 
-router.post(
-  "/org/:orgId/boards/:boardId/section/:sectionId/issue",
+router.delete(
+  "/org/:orgId/boards/:boardId/section/:sectionId",
   (req: Request, res: Response) => {},
 );
 
@@ -392,13 +547,25 @@ router.get(
   (req: Request, res: Response) => {},
 );
 
-router.get("/org/:orgId", (req: Request, res: Response) => {});
-router.get("/org/:orgId", (req: Request, res: Response) => {});
-router.delete("/org/:orgId", (req: Request, res: Response) => {});
-router.delete("/org/:orgId", (req: Request, res: Response) => {});
-router.put("/org/:orgId", (req: Request, res: Response) => {});
-router.put("/org/:orgId", (req: Request, res: Response) => {});
-router.post("/org/:orgId", (req: Request, res: Response) => {});
-router.delete("/org/:orgId", (req: Request, res: Response) => {});
-router.put("/org/:orgId", (req: Request, res: Response) => {});
-router.put("/org/:orgId", (req: Request, res: Response) => {});
+router.post(
+  "/org/:orgId/boards/:boardId/section/:sectionId/issue",
+  (req: Request, res: Response) => {},
+);
+
+router.post("/org/issue", (req: Request, res: Response) => {});
+router.delete("/org/issue", (req: Request, res: Response) => {});
+router.put("/org/issue/move", (req: Request, res: Response) => {});
+
+router.get("/org/issues", (req: Request, res: Response) => {});
+router.get("/org/issue/:issueId", (req: Request, res: Response) => {});
+
+router.post("/org/comment", (req: Request, res: Response) => {});
+router.put("/org/comment", (req: Request, res: Response) => {});
+router.delete("/org/comment", (req: Request, res: Response) => {});
+router.get("/org/comments", (req: Request, res: Response) => {});
+
+router.delete("/org/membership", (req: Request, res: Response) => {});
+
+router.post("/org/:assign", (req: Request, res: Response) => {});
+router.delete("/org/:unassign", (req: Request, res: Response) => {});
+router.get("/org/:assignedusers", (req: Request, res: Response) => {});

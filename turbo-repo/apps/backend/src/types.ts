@@ -24,6 +24,10 @@ export const InviteSchema = z.object({
   orgName: z.string()
 })
 
+export const acceptSchema = z.object({
+  token: z.string()
+})
+
 export const DeleteMembershipSchema = z.object({
   userId: z.number(),
   orgId: z.number()
@@ -37,11 +41,9 @@ export const CreateOrgSchema = z.object({
 export const OrgNameSchema = z.object({ name: z.string().min(1) });
 
 export const CreateBoardSchema = z.object({
-  orgId: z.number(),
   title: z.string().min(1)
 })
 export const UpdateBoardSchema = z.object({
-  boardId: z.number(),
   title: z.string().min(1),
 })
 
