@@ -48,11 +48,9 @@ export const UpdateBoardSchema = z.object({
 })
 
 export const CreateSectionSchema = z.object({
-  boardId: z.number(),
   title: z.string().min(1)
 })
 export const UpdateSectionSchema = z.object({
-  sectionId: z.number(),
   title: z.string().min(1)
 })
 

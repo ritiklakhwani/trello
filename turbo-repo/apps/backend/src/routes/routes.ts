@@ -7,8 +7,11 @@ import {
   OrgNameSchema,
   InviteSchema,
   CreateBoardSchema,
+  CreateIssueSchema,
   UpdateBoardSchema,
   acceptSchema,
+  CreateSectionSchema,
+  UpdateSectionSchema,
 } from "../types";
 import { Resend } from "resend";
 import { success } from "zod";
@@ -480,9 +483,9 @@ router.post(
 
     const user = await prisma.user.findUnique({
       where: {
-        id: req.userId
-      }
-    })
+        id: req.userId,
+      },
+    });
 
     if (!user || user.email !== Invitation.email) {
       return res.status(403).json({
@@ -493,7 +496,7 @@ router.post(
 
     const existing = await prisma.membership.findUnique({
       where: {
-        userId_orgId: { userId: req.userId, orgId: Invitation.organizationId},
+        userId_orgId: { userId: req.userId, orgId: Invitation.organizationId },
       },
     });
 
@@ -529,27 +532,307 @@ router.post(
 
 router.post(
   "/org/:orgId/boards/:boardId/section",
-  (req: Request, res: Response) => {},
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    const orgId = Number(req.params.orgId);
+    const boardId = Number(req.params.boardId);
+    const parsed = CreateSectionSchema.safeParse(req.body);
+
+    if (
+      !Number.isInteger(orgId) ||
+      !Number.isInteger(boardId) ||
+      !parsed.success
+    ) {
+      return res.status(400).json({
+        success: false,
+        msg: "Invalid organization ID or board ID or invalid input",
+      });
+    }
+
+    const { title } = parsed.data;
+
+    const board = await prisma.board.findFirst({
+      where: {
+        id: boardId,
+        organizationId: orgId,
+      },
+    });
+
+    if (!board)
+      return res.status(400).json({
+        success: false,
+        msg: "board does not belong to this org",
+      });
+
+    const membership = await prisma.membership.findUnique({
+      where: {
+        userId_orgId: { userId: req.userId, orgId: orgId },
+      },
+    });
+
+    if (!membership)
+      return res.status(403).json({
+        success: false,
+        msg: "you are not a member of this org",
+      });
+
+    const sectionCount = await prisma.section.count({
+      where: {
+        boardId,
+      },
+    });
+
+    await prisma.section.create({
+      data: {
+        title,
+        boardId,
+        position: sectionCount,
+      },
+    });
+  },
 );
 
 router.put(
   "/org/:orgId/boards/:boardId/section/:sectionId",
-  (req: Request, res: Response) => {},
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    const orgId = Number(req.params.orgId);
+    const boardId = Number(req.params.boardId);
+    const sectionId = Number(req.params.sectionId);
+
+    const parsed = UpdateSectionSchema.safeParse(req.body);
+
+    if (
+      !Number.isInteger(orgId) ||
+      !Number.isInteger(boardId) ||
+      !Number.isInteger(sectionId) ||
+      !parsed.success
+    ) {
+      return res.status(400).json({
+        success: false,
+        msg: "Invalid organization ID or board ID or invalid input",
+      });
+    }
+
+    const { title } = parsed.data;
+
+    const board = await prisma.board.findFirst({
+      where: {
+        id: boardId,
+        organizationId: orgId,
+      },
+    });
+
+    if (!board)
+      return res.status(400).json({
+        success: false,
+        msg: "board does not belong to this org",
+      });
+
+    const section = await prisma.section.findFirst({
+      where: {
+        id: sectionId,
+        boardId: board.id,
+      },
+    });
+
+    if (!section)
+      return res.status(400).json({
+        success: false,
+        msg: "this section does not belong to this board",
+      });
+
+    const membership = await prisma.membership.findUnique({
+      where: {
+        userId_orgId: { userId: req.userId, orgId: orgId },
+      },
+    });
+
+    if (!membership)
+      return res.status(403).json({
+        success: false,
+        msg: "you are not a member of this org",
+      });
+
+    await prisma.section.update({
+      where: {
+        id: section.id,
+        boardId: board.id,
+      },
+      data: {
+        title,
+      },
+    });
+  },
 );
 
 router.delete(
   "/org/:orgId/boards/:boardId/section/:sectionId",
-  (req: Request, res: Response) => {},
+  authMiddleware, async(req: Request, res: Response) => {
+    const orgId = Number(req.params.orgId);
+    const boardId = Number(req.params.boardId);
+    const sectionId = Number(req.params.sectionId);
+
+    if (
+      !Number.isInteger(orgId) ||
+      !Number.isInteger(boardId) ||
+      !Number.isInteger(sectionId)
+    ) {
+      return res.status(400).json({
+        success: false,
+        msg: "Invalid organization ID or board ID or invalid input",
+      });
+    }
+
+    const membership = await prisma.membership.findUnique({
+      where: {
+        userId_orgId: { userId: req.userId, orgId: orgId },
+      },
+    });
+
+    if (!membership || membership.role !== "ADMIN")
+      return res.status(403).json({
+        success: false,
+        msg: "you are not a member of this org",
+      });
+
+
+    const board = await prisma.board.findFirst({
+      where: {
+        id: boardId,
+        organizationId: orgId,
+      },
+    });
+
+    if (!board)
+      return res.status(400).json({
+        success: false,
+        msg: "board does not belong to this org",
+      });
+
+    const section = await prisma.section.findFirst({
+      where: {
+        id: sectionId,
+        boardId: board.id,
+      },
+    });
+
+    if (!section)
+      return res.status(400).json({
+        success: false,
+        msg: "this section does not belong to this board",
+      });
+
+    await prisma.section.delete({
+      where: {
+        id: section.id,
+      },
+    });
+  },
 );
 
 router.get(
-  "/org/:orgId/boards/:boardId/section",
-  (req: Request, res: Response) => {},
+  "/org/:orgId/boards/:boardId/sections",
+  authMiddleware, async (req: Request, res: Response) => {
+    const orgId = Number(req.params.orgId);
+    const boardId = Number(req.params.boardId);
+    if (
+      !Number.isInteger(orgId) ||
+      !Number.isInteger(boardId) ||
+    ) {
+      return res.status(400).json({
+        success: false,
+        msg: "Invalid organization ID or board ID or invalid input",
+      });
+    }
+
+    const membership = await prisma.membership.findUnique({
+      where: {
+        userId_orgId: { userId: req.userId, orgId: orgId },
+      },
+    });
+
+    if (!membership)
+      return res.status(403).json({
+        success: false,
+        msg: "you are not a member of this org",
+      });
+
+
+    const board = await prisma.board.findFirst({
+      where: {
+        id: boardId,
+        organizationId: orgId,
+      },
+    });
+
+    if (!board)
+      return res.status(400).json({
+        success: false,
+        msg: "board does not belong to this org",
+      });
+
+      const sections = await prisma.section.findMany({
+        where: {
+          boardId: board.id
+        }
+      })
+
+      if(!sections) return res.status(403).json({
+        success: false,
+        msg: "this board is empty no sections are there in this!"
+      })
+
+      return res.status(200).json({
+        success: true,
+        data: sections
+      })
+  },
 );
 
 router.post(
   "/org/:orgId/boards/:boardId/section/:sectionId/issue",
-  (req: Request, res: Response) => {},
+  authMiddleware, async(req: Request, res: Response) => {
+     const orgId = Number(req.params.orgId);
+    const boardId = Number(req.params.boardId);
+    const sectionId = Number(req.params.sectionId);
+
+    const parsed = CreateIssueSchema.safeParse(req.body)
+
+    if (
+      !Number.isInteger(orgId) ||
+      !Number.isInteger(boardId) ||
+      !Number.isInteger(sectionId) || !parsed.success
+    ) {
+      return res.status(400).json({
+        success: false,
+        msg: "Invalid organization ID or board ID or board ID or an invalid input",
+      });
+    }
+
+    const membership = await prisma.membership.findUnique({
+      where: {
+        userId_orgId: {
+          userId: req.userId, orgId: orgId
+        }
+      }
+    })
+
+    const board = await prisma.board.findUnique({
+      where: {
+        id: boardId,
+        organizationId: orgId
+      }
+    })
+
+    const section = await prisma.section.findUnique({
+      where: {
+        id: sectionId,
+        boardId: boardId
+      }
+    })
+
+  },
 );
 
 router.post("/org/issue", (req: Request, res: Response) => {});
