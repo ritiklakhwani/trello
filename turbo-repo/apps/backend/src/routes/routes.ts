@@ -668,7 +668,8 @@ router.put(
 
 router.delete(
   "/org/:orgId/boards/:boardId/section/:sectionId",
-  authMiddleware, async(req: Request, res: Response) => {
+  authMiddleware,
+  async (req: Request, res: Response) => {
     const orgId = Number(req.params.orgId);
     const boardId = Number(req.params.boardId);
     const sectionId = Number(req.params.sectionId);
@@ -695,7 +696,6 @@ router.delete(
         success: false,
         msg: "you are not a member of this org",
       });
-
 
     const board = await prisma.board.findFirst({
       where: {
@@ -733,13 +733,11 @@ router.delete(
 
 router.get(
   "/org/:orgId/boards/:boardId/sections",
-  authMiddleware, async (req: Request, res: Response) => {
+  authMiddleware,
+  async (req: Request, res: Response) => {
     const orgId = Number(req.params.orgId);
     const boardId = Number(req.params.boardId);
-    if (
-      !Number.isInteger(orgId) ||
-      !Number.isInteger(boardId) ||
-    ) {
+    if (!Number.isInteger(orgId) || !Number.isInteger(boardId)) {
       return res.status(400).json({
         success: false,
         msg: "Invalid organization ID or board ID or invalid input",
@@ -758,6 +756,72 @@ router.get(
         msg: "you are not a member of this org",
       });
 
+    const board = await prisma.board.findFirst({
+      where: {
+        id: boardId,
+        organizationId: orgId,
+      },
+    });
+
+    if (!board)
+      return res.status(400).json({
+        success: false,
+        msg: "board does not belong to this org",
+      });
+
+    const sections = await prisma.section.findMany({
+      where: {
+        boardId: board.id,
+      },
+    });
+
+    if (!sections)
+      return res.status(403).json({
+        success: false,
+        msg: "this board is empty no sections are there in this!",
+      });
+
+    return res.status(200).json({
+      success: true,
+      data: sections,
+    });
+  },
+);
+
+router.post(
+  "/org/:orgId/boards/:boardId/section/:sectionId/issue",
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    const orgId = Number(req.params.orgId);
+    const boardId = Number(req.params.boardId);
+    const sectionId = Number(req.params.sectionId);
+
+    const parsed = CreateIssueSchema.safeParse(req.body);
+
+    if (
+      !Number.isInteger(orgId) ||
+      !Number.isInteger(boardId) ||
+      !Number.isInteger(sectionId) ||
+      !parsed.success
+    ) {
+      return res.status(400).json({
+        success: false,
+        msg: "Invalid organization ID or board ID or board ID or an invalid input",
+      });
+    }
+
+    const { title, description } = parsed.data;
+    const membership = await prisma.membership.findUnique({
+      where: {
+        userId_orgId: { userId: req.userId, orgId: orgId },
+      },
+    });
+
+    if (!membership)
+      return res.status(403).json({
+        success: false,
+        msg: "you are not a member of this org",
+      });
 
     const board = await prisma.board.findFirst({
       where: {
@@ -772,72 +836,46 @@ router.get(
         msg: "board does not belong to this org",
       });
 
-      const sections = await prisma.section.findMany({
-        where: {
-          boardId: board.id
-        }
-      })
-
-      if(!sections) return res.status(403).json({
-        success: false,
-        msg: "this board is empty no sections are there in this!"
-      })
-
-      return res.status(200).json({
-        success: true,
-        data: sections
-      })
-  },
-);
-
-router.post(
-  "/org/:orgId/boards/:boardId/section/:sectionId/issue",
-  authMiddleware, async(req: Request, res: Response) => {
-     const orgId = Number(req.params.orgId);
-    const boardId = Number(req.params.boardId);
-    const sectionId = Number(req.params.sectionId);
-
-    const parsed = CreateIssueSchema.safeParse(req.body)
-
-    if (
-      !Number.isInteger(orgId) ||
-      !Number.isInteger(boardId) ||
-      !Number.isInteger(sectionId) || !parsed.success
-    ) {
-      return res.status(400).json({
-        success: false,
-        msg: "Invalid organization ID or board ID or board ID or an invalid input",
-      });
-    }
-
-    const membership = await prisma.membership.findUnique({
-      where: {
-        userId_orgId: {
-          userId: req.userId, orgId: orgId
-        }
-      }
-    })
-
-    const board = await prisma.board.findUnique({
-      where: {
-        id: boardId,
-        organizationId: orgId
-      }
-    })
-
-    const section = await prisma.section.findUnique({
+    const section = await prisma.section.findFirst({
       where: {
         id: sectionId,
-        boardId: boardId
-      }
-    })
+        boardId: board.id,
+      },
+    });
 
+    if (!section)
+      return res.status(400).json({
+        success: false,
+        msg: "this section does not belong to this board",
+      });
+
+      const issueCount = await prisma.issue.count({
+        where: {
+          sectionId: sectionId
+        }
+      })
+
+    const issue = await prisma.issue.create({
+      data: {
+        title,
+        description,
+        sectionId,
+        position: issueCount,
+      },
+    });
+
+    return res.status(200).json({
+      success:true,
+      msg: "issue created!",
+      data: issue
+    })
   },
 );
 
-router.post("/org/issue", (req: Request, res: Response) => {});
 router.delete("/org/issue", (req: Request, res: Response) => {});
-router.put("/org/issue/move", (req: Request, res: Response) => {});
+router.put("/org/:orgId/boards/:boardId/section/:sectionId/issue/:issueId", authMiddleware, async(req: Request, res: Response) => {
+  
+});
 
 router.get("/org/issues", (req: Request, res: Response) => {});
 router.get("/org/issue/:issueId", (req: Request, res: Response) => {});
