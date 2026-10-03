@@ -61,7 +61,6 @@ export const CreateIssueSchema = z.object({
 })
 
 export const UpdateIssueSchema = z.object({
-  issueId: z.number(),
   title: z.string().min(1).optional(),
   description: z.string().optional()
 })
