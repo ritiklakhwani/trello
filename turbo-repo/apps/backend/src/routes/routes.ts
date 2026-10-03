@@ -873,7 +873,85 @@ router.post(
   },
 );
 
-router.delete("/org/issue", (req: Request, res: Response) => {});
+router.delete("/org/:orgId/boards/:boardId/section/:sectionId/issue/:issueId", authMiddleware, async (req: Request, res: Response) => {
+  const orgId = Number(req.params.orgId);
+    const boardId = Number(req.params.boardId);
+    const sectionId = Number(req.params.sectionId);
+    const issueId = Number(req.params.issueId);
+    if (
+      !Number.isInteger(orgId) ||
+      !Number.isInteger(boardId) ||
+      !Number.isInteger(sectionId) ||
+      !Number.isInteger(issueId)
+    ) {
+      return res.status(400).json({
+        success: false,
+        msg: "Invalid organization ID or board ID or board ID or an invalid input",
+      });
+    }
+
+    const membership = await prisma.membership.findUnique({
+      where: {
+        userId_orgId: { userId: req.userId, orgId: orgId },
+      },
+    });
+
+    if (!membership)
+      return res.status(403).json({
+        success: false,
+        msg: "you are not a member of this org",
+      });
+
+    const board = await prisma.board.findFirst({
+      where: {
+        id: boardId,
+        organizationId: orgId,
+      },
+    });
+
+    if (!board)
+      return res.status(400).json({
+        success: false,
+        msg: "board does not belong to this org",
+      });
+
+    const section = await prisma.section.findFirst({
+      where: {
+        id: sectionId,
+        boardId: board.id,
+      },
+    });
+
+    if (!section)
+      return res.status(400).json({
+        success: false,
+        msg: "this section does not belong to this board",
+      });
+
+    const issueExist = await prisma.issue.findFirst({
+      where: {
+        id: issueId,
+        sectionId: sectionId,
+      },
+    });
+
+    if (!issueExist)
+      return res.status(400).json({
+        success: false,
+        msg: "this issue does not belong to this section",
+      });
+
+    await prisma.issue.delete({
+      where: {
+        id: issueExist.id,
+      }
+    });
+
+    return res.status(200).json({
+      success: true,
+      msg: "issue deleted!",
+    });
+});
 
 router.put(
   "/org/:orgId/boards/:boardId/section/:sectionId/issue/:issueId",
