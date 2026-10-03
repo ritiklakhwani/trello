@@ -590,6 +590,10 @@ router.post(
         position: sectionCount,
       },
     });
+
+    return res
+      .status(200)
+      .json({ success: true, msg: "section created successfully!" });
   },
 );
 
@@ -664,6 +668,10 @@ router.put(
         title,
       },
     });
+
+    return res
+      .status(200)
+      .json({ success: true, msg: "section updated successfully!" });
   },
 );
 
@@ -729,6 +737,10 @@ router.delete(
         id: section.id,
       },
     });
+
+    return res
+      .status(200)
+      .json({ success: true, msg: "section deleted successfully!" });
   },
 );
 
@@ -873,8 +885,11 @@ router.post(
   },
 );
 
-router.delete("/org/:orgId/boards/:boardId/section/:sectionId/issue/:issueId", authMiddleware, async (req: Request, res: Response) => {
-  const orgId = Number(req.params.orgId);
+router.delete(
+  "/org/:orgId/boards/:boardId/section/:sectionId/issue/:issueId",
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    const orgId = Number(req.params.orgId);
     const boardId = Number(req.params.boardId);
     const sectionId = Number(req.params.sectionId);
     const issueId = Number(req.params.issueId);
@@ -944,14 +959,15 @@ router.delete("/org/:orgId/boards/:boardId/section/:sectionId/issue/:issueId", a
     await prisma.issue.delete({
       where: {
         id: issueExist.id,
-      }
+      },
     });
 
     return res.status(200).json({
       success: true,
       msg: "issue deleted!",
     });
-});
+  },
+);
 
 router.put(
   "/org/:orgId/boards/:boardId/section/:sectionId/issue/:issueId",
@@ -1047,7 +1063,73 @@ router.put(
   },
 );
 
-router.get("/org/issues", (req: Request, res: Response) => {});
+router.get(
+  "/org/:orgId/board/:boardId/section/issues",
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    const orgId = Number(req.params.orgId);
+    const boardId = Number(req.params.boardId);
+
+    if (!Number.isInteger(orgId) || !Number.isInteger(boardId)) {
+      return res.status(400).json({
+        success: false,
+        msg: "Invalid organization ID or board ID or board ID or an invalid input",
+      });
+    }
+
+    const membership = await prisma.membership.findUnique({
+      where: {
+        userId_orgId: { userId: req.userId, orgId: orgId },
+      },
+    });
+
+    if (!membership)
+      return res.status(403).json({
+        success: false,
+        msg: "you are not a member of this org",
+      });
+
+    const board = await prisma.board.findFirst({
+      where: {
+        id: boardId,
+        organizationId: orgId,
+      },
+    });
+
+    if (!board)
+      return res.status(400).json({
+        success: false,
+        msg: "board does not belong to this org",
+      });
+
+    const sections = await prisma.section.findMany({
+      where: {
+        boardId: boardId,
+      },
+      orderBy: {
+        position: "asc",
+      },
+      include: {
+        issues: {
+          orderBy: {
+            position: "asc",
+          },
+        },
+      },
+    });
+
+    if (!sections)
+      return res.status(403).json({
+        success: false,
+        msg: "no sections found",
+      });
+
+    return res.status(201).json({
+      success: true,
+      data: sections,
+    });
+  },
+);
 router.get("/org/issue/:issueId", (req: Request, res: Response) => {});
 
 router.post("/org/comment", (req: Request, res: Response) => {});
