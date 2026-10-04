@@ -72,4 +72,4 @@ export const MoveIssueSchema = z.object({
 })
 
 export const CreateCommentSchema = z.object({ content: z.string().min(1) });
-export const UpdateCommentSchema = z.object({ commentId: z.number(), content: z.string().min(1) });
+export const UpdateCommentSchema = z.object({ content: z.string().min(1) });
