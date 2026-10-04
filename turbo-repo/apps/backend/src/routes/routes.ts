@@ -13,6 +13,7 @@ import {
   CreateSectionSchema,
   UpdateSectionSchema,
   UpdateIssueSchema,
+  CreateCommentSchema,
 } from "../types";
 import { Resend } from "resend";
 import { success } from "zod";
@@ -1064,7 +1065,7 @@ router.put(
 );
 
 router.get(
-  "/org/:orgId/board/:boardId/section/issues",
+  "/org/:orgId/boards/:boardId/issues",
   authMiddleware,
   async (req: Request, res: Response) => {
     const orgId = Number(req.params.orgId);
@@ -1073,21 +1074,25 @@ router.get(
     if (!Number.isInteger(orgId) || !Number.isInteger(boardId)) {
       return res.status(400).json({
         success: false,
-        msg: "Invalid organization ID or board ID or board ID or an invalid input",
+        msg: "Invalid organization ID or board ID",
       });
     }
 
     const membership = await prisma.membership.findUnique({
       where: {
-        userId_orgId: { userId: req.userId, orgId: orgId },
+        userId_orgId: {
+          userId: req.userId,
+          orgId,
+        },
       },
     });
 
-    if (!membership)
+    if (!membership) {
       return res.status(403).json({
         success: false,
-        msg: "you are not a member of this org",
+        msg: "You are not a member of this org",
       });
+    }
 
     const board = await prisma.board.findFirst({
       where: {
@@ -1096,15 +1101,16 @@ router.get(
       },
     });
 
-    if (!board)
-      return res.status(400).json({
+    if (!board) {
+      return res.status(404).json({
         success: false,
-        msg: "board does not belong to this org",
+        msg: "Board not found in this org",
       });
+    }
 
     const sections = await prisma.section.findMany({
       where: {
-        boardId: boardId,
+        boardId: board.id,
       },
       orderBy: {
         position: "asc",
@@ -1118,21 +1124,192 @@ router.get(
       },
     });
 
-    if (!sections)
-      return res.status(403).json({
-        success: false,
-        msg: "no sections found",
-      });
-
-    return res.status(201).json({
+    return res.status(200).json({
       success: true,
       data: sections,
     });
   },
 );
-router.get("/org/issue/:issueId", (req: Request, res: Response) => {});
+router.get(
+  "/org/:orgId/board/:boardId/section/:sectionId/issue/:issueId",
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    const orgId = Number(req.params.orgId);
+    const boardId = Number(req.params.boardId);
+    const sectionId = Number(req.params.sectionId);
+    const issueId = Number(req.params.issueId);
 
-router.post("/org/comment", (req: Request, res: Response) => {});
+    if (
+      !Number.isInteger(orgId) ||
+      !Number.isInteger(boardId) ||
+      !Number.isInteger(sectionId) ||
+      !Number.isInteger(issueId)
+    ) {
+      return res.status(400).json({
+        success: false,
+        msg: "Invalid organization ID or board ID",
+      });
+    }
+
+    const membership = await prisma.membership.findUnique({
+      where: {
+        userId_orgId: {
+          userId: req.userId,
+          orgId,
+        },
+      },
+    });
+
+    if (!membership) {
+      return res.status(403).json({
+        success: false,
+        msg: "You are not a member of this org",
+      });
+    }
+
+    const board = await prisma.board.findFirst({
+      where: {
+        id: boardId,
+        organizationId: orgId,
+      },
+    });
+
+    if (!board) {
+      return res.status(404).json({
+        success: false,
+        msg: "Board not found in this org",
+      });
+    }
+
+    const section = await prisma.section.findUnique({
+      where: {
+        id: sectionId,
+        boardId: board.id,
+      },
+    });
+
+    if (!section) {
+      return res.status(404).json({
+        success: false,
+        msg: "section not found in this board",
+      });
+    }
+
+    const issue = await prisma.issue.findFirst({
+      where: {
+        id: issueId,
+        sectionId: sectionId,
+      },
+    });
+
+    if (!issue) {
+      return res.status(404).json({
+        success: false,
+        msg: "section not found in this board",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: issue,
+    });
+  },
+);
+
+router.post("/org/:orgId/board/:boardId/section/:sectionId/issue/:issueId/comment", authMiddleware, async(req: Request, res: Response) => {
+  const orgId = Number(req.params.orgId);
+  const boardId = Number(req.params.boardId);
+  const sectionId = Number(req.params.sectionId);
+  const issueId = Number(req.params.issueId);
+  const parsed = CreateCommentSchema.safeParse(req.body)
+
+  if (
+    !Number.isInteger(orgId) ||
+    !Number.isInteger(boardId) ||
+    !Number.isInteger(sectionId) ||
+    !Number.isInteger(issueId) || 
+    !parsed.success
+  ) {
+    return res.status(400).json({
+      success: false,
+      msg: "Invalid organization ID or board ID",
+    });
+  }
+
+  const { content } = parsed.data
+
+  const membership = await prisma.membership.findUnique({
+    where: {
+      userId_orgId: {
+        userId: req.userId,
+        orgId,
+      },
+    },
+  });
+
+  if (!membership) {
+    return res.status(403).json({
+      success: false,
+      msg: "You are not a member of this org",
+    });
+  }
+
+  const board = await prisma.board.findFirst({
+    where: {
+      id: boardId,
+      organizationId: orgId,
+    },
+  });
+
+  if (!board) {
+    return res.status(404).json({
+      success: false,
+      msg: "Board not found in this org",
+    });
+  }
+
+  const section = await prisma.section.findFirst({
+    where: {
+      id: sectionId,
+      boardId: board.id,
+    },
+  });
+
+  if (!section) {
+    return res.status(404).json({
+      success: false,
+      msg: "section not found in this board",
+    });
+  }
+
+  const issue = await prisma.issue.findFirst({
+    where: {
+      id: issueId,
+      sectionId: sectionId,
+    },
+  });
+
+  if (!issue) {
+    return res.status(404).json({
+      success: false,
+      msg: "section not found in this board",
+    });
+  }
+
+  const comment = await prisma.comment.create({
+    data: {
+      issueId: issueId,
+      content: content,
+      userId: req.userId
+    }
+  })
+
+  return res.status(200).json({
+    success: true,
+    data: comment,
+  });
+});
+
 router.put("/org/comment", (req: Request, res: Response) => {});
 router.delete("/org/comment", (req: Request, res: Response) => {});
 router.get("/org/comments", (req: Request, res: Response) => {});
